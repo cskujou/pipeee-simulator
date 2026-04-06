@@ -13,25 +13,29 @@ DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 # Create a formatter
 _formatter = logging.Formatter(LOG_FORMAT, DATE_FORMAT)
 
-# Create a stream handler (stdout)
+# Stream handler (console) - initially disabled
 _stream_handler = logging.StreamHandler(sys.stdout)
 _stream_handler.setFormatter(_formatter)
+_stream_handler.setLevel(logging.DEBUG)  # Set to DEBUG so we can control via logger level
 
-# Configure the root logger
-_root_logger = logging.getLogger()
-_root_logger.setLevel(logging.INFO)
-_root_logger.handlers = []  # Remove any existing handlers
-_root_logger.addHandler(_stream_handler)
+# Null handler to suppress default behavior
+_null_handler = logging.NullHandler()
 
 # File handler
 _file_handler = None
+
+# Configure the root logger with only null handler initially
+_root_logger = logging.getLogger()
+_root_logger.setLevel(logging.WARNING)  # Default to WARNING to suppress excess output
+_root_logger.handlers = []  # Remove any existing handlers
+_root_logger.addHandler(_null_handler)
 
 
 def configure_logging(
     log_level: Union[str, int] = logging.INFO,
     log_file: Optional[str] = None,
     file_mode: str = "a",
-    disable_console: bool = False,
+    disable_console: bool = True,
 ):
     """
     Configure logging settings.
@@ -90,10 +94,28 @@ def configure_logging(
             _file_handler.close()
             _file_handler = None
 
-    # Also set levels for existing loggers
-    for name, logger in logging.Logger.manager.loggerDict.items():
-        if isinstance(logger, logging.Logger) and name.startswith("pipeee."):
-            logger.setLevel(log_level)
+    # Also set levels for existing loggers and configure handlers
+    for _, logger_obj in list(logging.Logger.manager.loggerDict.items()):
+        if not isinstance(logger_obj, logging.Logger):
+            continue
+        logger_obj.setLevel(log_level)
+
+        if disable_console:
+            # Remove all stream handlers from this logger
+            for handler in logger_obj.handlers[:]:
+                if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
+                    logger_obj.removeHandler(handler)
+            # Set propagate to False to prevent output to console via root logger
+            logger_obj.propagate = False
+            # Add file handler if available
+            if _file_handler and _file_handler not in logger_obj.handlers:
+                logger_obj.addHandler(_file_handler)
+        else:
+            logger_obj.propagate = True
+            if _stream_handler not in logger_obj.handlers:
+                logger_obj.addHandler(_stream_handler)
+            if _file_handler and _file_handler not in logger_obj.handlers:
+                logger_obj.addHandler(_file_handler)
 
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:
@@ -109,15 +131,15 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
     if name is None:
         return _root_logger
 
-    logger = logging.getLogger(name)
-    logger.setLevel(_root_logger.getEffectiveLevel())
+    logger_obj = logging.getLogger(name)
+    logger_obj.setLevel(_root_logger.getEffectiveLevel())
 
     # Ensure the logger has handlers (only add once)
-    if not logger.handlers:
+    if not logger_obj.handlers:
         if _file_handler:
-            logger.addHandler(_file_handler)
+            logger_obj.addHandler(_file_handler)
         if _stream_handler in _root_logger.handlers:
-            logger.addHandler(_stream_handler)
-        logger.propagate = False  # Prevent propagating to root logger twice
+            logger_obj.addHandler(_stream_handler)
+        logger_obj.propagate = False  # Prevent propagating to root logger twice
 
-    return logger
+    return logger_obj

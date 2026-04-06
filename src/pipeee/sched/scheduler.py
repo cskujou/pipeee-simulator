@@ -11,6 +11,7 @@ from pipeee.request import Request
 from pipeee.request_queue import RequestQueue
 from pipeee.sched.scheduler_budget import SchedulerBudgetFactory
 from pipeee.sched.spec_cache import SpecCache
+from pipeee.sched.utils import remove_all
 
 logger = get_logger(__name__)
 
@@ -43,6 +44,10 @@ class Scheduler:
         req_index = 0
         while req_index < len(self.running) and budget.pre_check():
             request = self.running[req_index]
+            if request.finished:
+                logger.debug(f"Skipping finished request: {request.req_id}")
+                req_index += 1
+                continue
             enough_budget = budget.post_check(request)
             if not enough_budget:
                 logger.debug(f"Not enough budget to schedule running request: {request.req_id}")
@@ -95,13 +100,18 @@ class Scheduler:
 
     def update_from_output(self, output):
         logger.info(f"Updating scheduler from {len(output)} sampled output(s)")
+
         for sampled_output in output:
             req_id = sampled_output.req_id
             if req_id not in self.requests:
                 logger.warning(f"Received output for unknown req_id: {req_id}")
                 continue
+            
             request = self.requests[req_id]
-
+            if request.finished:
+                logger.debug(f"Skipping update for finished request: req_id={req_id}")
+                continue
+            
             if sampled_output.is_early_exited:
                 logger.debug(f"Processing early exited output for req_id={req_id}")
                 for i in range(len(sampled_output.token_ids)):
@@ -114,29 +124,35 @@ class Scheduler:
                     )
             else:
                 logger.debug(f"Processing non-early exited output for req_id={req_id}")
-                
+
                 assert request.root_id is not None, f"Request {req_id} has no root_id set for non-early exited output"
                 for i, nid in enumerate(sampled_output.node_idx):
                     if nid == request.root_id:
-                        root_cache_id = request.update(
+                        result = request.update(
                             token_id=sampled_output.token_ids[i][0],
                             root_node_id=nid,
+                            is_eos=sampled_output.is_eos[i][0],
                         )
-                        if root_cache_id is not None:
-                            self.transfer_completed_kv_cache(request, root_cache_id)
-                
+                        if result.finished:
+                            self.finished_requests.append(request)
+                        elif result.root_cache_id is not None:
+                            self.transfer_completed_kv_cache(request, result.root_cache_id)                
 
 
     def pop_finished_requests(self) -> list[Request]:
         logger.info(f"Popping {len(self.finished_requests)} finished request(s)")
+        finished_req_ids = {request.req_id for request in self.finished_requests}
+        self.running = remove_all(self.running, finished_req_ids)
+
         for request in self.finished_requests:
             logger.debug(f"Cleaning up resources for req_id={request.req_id}")
-            if request in self.requests:
+            if request.req_id in self.requests:
                 self.requests.pop(request.req_id)
             if request.req_id in self.kv_cache:
                 del self.kv_cache[request.req_id]
             if request.req_id in self.spec_kv_cache:
                 del self.spec_kv_cache[request.req_id]
+            request.trie = None
 
         finished_requests = self.finished_requests
         self.finished_requests = []

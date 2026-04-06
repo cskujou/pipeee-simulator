@@ -15,6 +15,7 @@ class TokenizedRequest:
     
 @dataclass
 class PrefillOutput:
+    req_id: int
     input_ids: list[int]
     first_token_id: int
     past_key_values: Optional[Cache] = None
@@ -27,9 +28,9 @@ class DecodeInput:
     past_key_values: Optional[Cache] = None
     
     @staticmethod
-    def from_prefill_output(prefill_output: PrefillOutput, req_id: int) -> "DecodeInput":
+    def from_prefill_output(prefill_output: PrefillOutput) -> "DecodeInput":
         return DecodeInput(
-            req_id=req_id,
+            req_id=prefill_output.req_id,
             input_ids=prefill_output.input_ids,
             first_token_id=prefill_output.first_token_id,
             past_key_values=prefill_output.past_key_values,

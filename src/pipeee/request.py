@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Optional
 
 import torch
@@ -8,6 +9,12 @@ from pipeee.modeling_io import DecodeInput, ModelInput
 from pipeee.request_trie import EarlyExitedTokenTrie
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class UpdateResult:
+    root_cache_id: Optional[int]
+    finished: bool
 
 
 class Request:
@@ -71,9 +78,13 @@ class Request:
         return self.trie.root.node_id if self.trie.root is not None else None
 
     def update(
-        self, token_id: int, root_node_id: Optional[int] = None, position: Optional[int] = None
-    ) -> Optional[int]:
-        logger.debug(f"Request {self.req_id} updating with token_id: {token_id}")
+        self,
+        token_id: int,
+        root_node_id: Optional[int] = None,
+        position: Optional[int] = None,
+        is_eos: bool = False,
+    ) -> UpdateResult:
+        logger.debug(f"Request {self.req_id} updating with token_id: {token_id}, is_eos: {is_eos}")
         # Two case to update trie
         # 1. No root, token_id is generated during the prefill stage.
         # 2. With root, but need to confirm that the next token is sampled from the current root.
@@ -83,9 +94,15 @@ class Request:
 
         self._output_token_ids.append(token_id)
         logger.debug(f"Output tokens for req_id={self.req_id}: {len(self._output_token_ids)}")
+
+        if is_eos:
+            self.finished = True
+            logger.info(f"Request {self.req_id} finished due to EOS, releasing trie resources")
+            return UpdateResult(root_cache_id=None, finished=True)
+
         root_cache_id = self.trie.update(token_id, position)
         logger.debug(f"Root cache id for req_id={self.req_id}: {root_cache_id}")
-        return root_cache_id
+        return UpdateResult(root_cache_id=root_cache_id, finished=False)
 
     def create_model_input(self) -> ModelInput:
         logger.debug(f"Creating model input for req_id={self.req_id}")

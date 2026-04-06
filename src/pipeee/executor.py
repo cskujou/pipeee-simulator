@@ -1,7 +1,7 @@
 from transformers import AutoTokenizer
-from pipeee.logger import get_logger
 
 from pipeee.buffer import Buffer
+from pipeee.logger import get_logger
 from pipeee.modeling_io import SampledOutput, WorkerOutput
 from pipeee.worker.models.modeling_llama import LlamaForCausalLM
 from pipeee.worker.worker import Worker
@@ -41,10 +41,6 @@ class Executor:
             self.workers.append(worker)
             logger.debug(f"Worker {i} initialized")
 
-    # def add_request(self, request: TokenizedRequest):
-    #     request.input_ids.to(self.model.device)
-    #     self.requests.append(request)
-
     def collect_worker_outputs(self) -> list[WorkerOutput]:
         outputs = []
         while not self.output_buffer.is_buffer_empty(-1):
@@ -64,6 +60,7 @@ class Executor:
 
     def send_to_first_worker(self, batch):
         logger.debug(f"Sending batch to first worker with {len(batch.requests)} request(s)")
+        # TODO: 暂时不去做 Continue Batching
         for request in batch.requests:
             self.input_buffer.add_to_buffer(0, request)
 
@@ -93,24 +90,6 @@ class Executor:
                 )
             )
         return output
-    # def get_output(self, schedule_output, worker_outputs):
-    #     assert len(schedule_output.requests) == len(worker_outputs)
-    #     output = []
-    #     for i in range(len(schedule_output.requests)):
-    #         request = schedule_output.requests[i]
-    #         worker_output = worker_outputs[i]
-    #         output.append(
-    #             SampledOutput(
-    #                 req_id=request.req_id,
-    #                 token_ids=worker_output.token_ids,
-    #                 confidences=worker_output.confidences,
-    #                 node_idx=request.node_idx,
-    #                 is_early_exited=not worker_output.last_worker,
-    #                 is_eos=worker_output.is_eos,
-    #                 exit_layer_idx=worker_output.exit_layer_idx,
-    #             )
-    #         )
-    #     return output
 
     def execute_model_step(self, schedule_output):
         logger.info(f"Executing model step with {len(schedule_output.requests) if schedule_output.requests else 0} request(s)")
