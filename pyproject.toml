@@ -1,0 +1,59 @@
+[project]
+name = "pipeee"
+version = "0.1.0"
+description = "PipeEE"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "bitsandbytes==0.47.0",
+    "flashinfer-python==0.3.1",
+    "llmcompressor>=0.7.1",
+    "numpy==2.2",
+    "nvidia-ml-py>=13.580.82",
+    "torch==2.8.0",
+    "transformers>=4.55.2",
+    "vllm==0.10.2",
+]
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.1.0",
+    "mypy>=1.18.2",
+    "pytest>=8.4.2",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = 'py312'
+
+[tool.ruff.lint]
+select = [
+    'F',      # Pyflakes
+    'E',      # pycodestyle (Error)
+    'I',      # isort
+    'UP',     # pyupgrade
+    'YTT',    # flake8-2020
+    'B',      # flake8-bugbear
+    'T10',    # flake8-debugger
+    'T20',    # flake8-print
+    'C4',     # flake8-comprehensions
+    'PIE',    # flake8-pie
+    'PYI006', # flake8-pyi
+    'PYI062', # flake8-pyi
+    'PYI063', # flake8-pyi
+    'PYI066', # flake8-pyi
+]
+ignore = ['D105', 'D107', 'D205', 'D415', 'E501', 'B011', 'B028', 'B904', 'PIE804', 
+        'D100', 'D102', 'D103', 'D104', 'UP007', 'UP045']
+isort = { known-first-party = ['pipeee', 'tests'] }
+mccabe = { max-complexity = 14 }
+pydocstyle = { convention = 'google' }
+
+[tool.ruff.lint.per-file-ignores]
+'tests/*' = ['D', 'B', 'C4']
+'toys/**' = ['T201']
+'evaluation/**' = ['T201']
